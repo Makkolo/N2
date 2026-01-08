@@ -1,3 +1,0 @@
-/home/pi/N2/build/Release/CMakeFiles/N2Gateway.dir
-/home/pi/N2/build/Release/CMakeFiles/edit_cache.dir
-/home/pi/N2/build/Release/CMakeFiles/rebuild_cache.dir
