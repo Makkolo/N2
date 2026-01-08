@@ -1,0 +1,4 @@
+{
+    "cmake.installPrefix": "${workspaceFolder}/install/${buildType}",
+    "cmake.buildDirectory": "${workspaceFolder}/build/${buildType}"
+}

@@ -1,0 +1,1 @@
+/usr/bin/c++ -g -g -O0 CMakeFiles/N2Gateway.dir/source.cpp.o CMakeFiles/N2Gateway.dir/n2Interpreter.cpp.o CMakeFiles/N2Gateway.dir/tcpComs.cpp.o -o N2Gateway  -lpthread 
