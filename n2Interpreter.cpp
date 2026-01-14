@@ -1,16 +1,5 @@
 #include "n2Interpreter.hpp"
 
-#include <iostream>
-#include <cmath>
-#include <string.h>
-#include <sstream>
-
-//Serial coms
-#include <fcntl.h> // Contains file controls like O_RDWR
-#include <errno.h> // Error integer and strerror() function
-#include <termios.h> // Contains POSIX terminal control definitions
-#include <unistd.h> // write(), read(), close()
-
 
 
 float n2numberToFloat(const uint16_t msg)        //Convert N2 number to float.
@@ -125,27 +114,12 @@ uint32_t n2ChkCalc(__uint128_t msg, uint8_t len)                            //Ca
 
 int n2AdrCalc(uint32_t *adr, const n2RequestData req)
 {
+	n2ModuleInfo modInfo = n2Modules.at(req.module);
 
-	if (moduleAdr.find(req.module) == moduleAdr.end())
-	{
-		std::cout << "Error: Module \"" << req.module << "\" is not defined.\n" << std::flush;
-		return 0x10;
-	}
 	
-	*adr = ((req.deviceId)<<0x10) | (moduleAdr.at(req.module) + moduleSize.at(req.module) * (req.index -1));
+	*adr = ((req.deviceId)<<0x10) | (modInfo.address + modInfo.items.at(req.item) + modInfo.size * (req.index -1));
 
-	if (!std::holds_alternative<std::monostate>(req.pgm))
-	{
-		std::string pgm = std::get<std::string>(req.pgm);
-		if (pgmAdr.find(pgm) == pgmAdr.end())
-		{
-			std::cout << "Error: PGM item \"" << pgm << "\" does not exist\n" << std::flush;
-			return 0x20;
-		}
-		
-		(*adr)+= pgmAdr.at(pgm);
-	}
-
+	
 	if (!std::holds_alternative<std::monostate>(req.data))
 		(*adr) |= n2WriteCmd;
 	else
@@ -269,8 +243,17 @@ int n2DecodeMsg(n2RequestData *req, std::string msg) //val must be float = index
 	//Remove checksum
 	imsg = (imsg>>24);
 
-	//Check if data is boolean and return boolean value 
-	if (req->binary)
+
+	//Return raw byte
+	if (req->item != "BYTE")
+		req->data = uint8_t(imsg);
+
+	//Return raw WORD
+	else if (req->item == "WORD")
+		req->data = uint16_t(imsg);
+
+	//Return bool
+	else if (req->binary)
 	{
 		if (len > 2)
 			req->data = uint16_t(imsg);
@@ -279,7 +262,10 @@ int n2DecodeMsg(n2RequestData *req, std::string msg) //val must be float = index
 		return 0;
 	}
 
-	req->data = n2numberToFloat(imsg);
+	//Return float
+	else
+		req->data = n2numberToFloat(imsg);
+	
 	return 0;
 }
 
@@ -467,4 +453,96 @@ int n2Request(n2RequestData *req, int serialPort, int serialTxBuffSz, int serial
 	err = n2DecodeMsg(req, msg);
 
 	return err;
+}
+
+
+
+
+
+
+
+
+
+
+//Simple file reading function to expand lookup table.
+int expandTables(std::string filePath)
+{
+    std::string line;
+    std::ifstream file(filePath);
+	const char space[2] = {' ', '\t'};
+	std::string module, item, temp;
+	uint16_t address;
+	uint8_t size, count, offset;
+
+	//Iterate through file, line by line.
+    while(std::getline(file, line))
+    {
+		//Remove spaces
+		cleanString(&line, space, 2);
+
+		while(line.length() > 0)
+		{
+			//Get module name
+			if (extractString(&line, &module, ','))
+				return 0x10;
+			
+
+			//Check if module allready exists, add item if it does.
+			if(n2Modules.find(module) == n2Modules.end())
+			{
+
+				//Get address
+				if (extractString(&line, &temp, ','))
+					return 0x10;
+				address = std::stoi(temp);
+
+
+				//Get size
+				if (extractString(&line, &temp, ','))
+					return 0x10;
+				size = std::stoi(temp);
+
+
+				//Get count
+				if (extractString(&line, &temp, ','))
+					return 0x10;
+				count = std::stoi(temp);
+
+
+				//Get item
+				if (extractString(&line, &item, ','))
+					return 0x10;
+
+
+				//Get offset
+				if (extractString(&line, &temp, ','))
+					return 0x10;
+				offset = std::stoi(temp);
+
+				//Append the new module to the lookup table
+				n2Modules.insert({ module, { address, size, count, {{ item, offset }} } });			
+			}
+			else
+			{
+				//Get item
+				if (extractString(&line, &item, ','))
+					return 0x10;
+
+
+				if (n2Modules.at(module).items.find(item) == n2Modules.at(module).items.end())
+				{
+					//Get offset
+					if (extractString(&line, &temp, ','))
+						return 0x10;
+					offset = std::stoi(temp);
+					
+					//Append item to the lookup table of the corresponding module
+					n2Modules.at(module).items.insert({item, std::stoi(temp)});
+				}
+				else
+					std::cout << "WARNING: expandTables: Skipping this entry as item \"" << item << "\" is allready defined for module \"" << module << "\". Verify that the format is correct" << std::flush;
+			}
+		}
+    }
+	return 0;
 }

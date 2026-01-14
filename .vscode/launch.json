@@ -9,7 +9,7 @@
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceRoot}/build/debug/N2Gateway",
-            "args": ["/dev/ttyRS485"],
+            "args": ["/dev/ttyRS485"],//, "/home/pi/temp/temp.txt"],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],

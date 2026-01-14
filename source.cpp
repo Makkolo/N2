@@ -179,7 +179,7 @@ int n2Coms(std::queue<std::string> *reqQ, std::mutex *lockReqQ, std::queue<std::
         {
             //Get next request in inbound tcp queue
             lockReqQ->lock();
-            if (!nodeRedToN2(&req, reqQ->front()))
+            if (!tcpToN2(&req, reqQ->front()))
             {
                 lockReqQ->unlock();
 
@@ -214,9 +214,12 @@ int n2Coms(std::queue<std::string> *reqQ, std::mutex *lockReqQ, std::queue<std::
             }
             else
             {
-                std::cout << "TCP request is in an invalid format: \"" << reqQ->front() << "\"\n" << std::flush;
                 reqQ->pop();
                 lockReqQ->unlock();
+                std::cout << "TCP request is in an invalid format: \"" << reqQ->front() << "\"\n" << std::flush;
+                lockAnsQ->lock();
+                ansQ->push("Invalid request format");
+                lockAnsQ->unlock();
             }
         }
         else
@@ -303,7 +306,16 @@ int main(int argc, char* argv[])        //Input arguments from terminal, first a
         return -1;
     }
     
-    
+    //If more than 1 argument was passed, assume that the second argument is path to a lookup table expansion file.
+    if (argc > 2)
+    {
+        if (expandTables(argv[2]))
+        {    
+            std::cout << "Error ocured while reading file \"" << argv[2] << "\". Verify that the format is correct." << std::flush;
+            return -1;
+        }
+    }
+
     //Lambda functions to terminate program on shutdown/interrupt
     std::signal(SIGTERM, [](int) { terminateProgram = true; });
     std::signal(SIGINT, [](int) { terminateProgram = true; });
