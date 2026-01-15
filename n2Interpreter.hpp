@@ -35,7 +35,6 @@ struct n2RequestData
     std::string module;                                                             //AI, AO, DI, DO, LRS, PGM
     std::string item;                                  //Program module sub type, only relevant for PGM (for example pid.kp)
     uint8_t index;                                                                  //AI1, AI2 and so on
-    bool binary;                                                                    //True if data is binary/boolean
     std::variant<std::monostate, uint8_t, uint16_t, float, std::string> data;       //Data to write (optional)
 };
 
@@ -110,8 +109,8 @@ struct n2ModuleInfo{
 //Uses the item name to determine the output data format
 const std::unordered_map<std::string, uint8_t> byteDefault =
 {
-    {"CV",      0},     //Bool
-    {"BYTE",    0}      //Byte (uint8_t)
+    {"BOOL",        0},           //uint8_t
+    {"BYTE",        0}              //uint8_t
 };
 
 
@@ -122,8 +121,21 @@ const std::unordered_map<std::string, uint8_t> byteDefault =
 //Uses the item name to determine the output data format
 const std::unordered_map<std::string, uint8_t> wordDefault =
 {
-    {"CV",      0},     //Float
-    {"WORD",    0}      //WORD (uint16_t)
+    {"BOOL",        0},         //uint8_t
+    {"WORD",        0},         //uint16_t
+    {"FLOAT",       0}          //Float
+};
+
+
+
+
+
+//For modules of type "4 Bytes"
+//Uses the item name to determine the output data format
+const std::unordered_map<std::string, uint8_t> dwordDefault =
+{
+    {"BOOL",        0},         //uint8_t
+    {"DWORD",       0}         //WORD (uint16_t)
 };
 
 
@@ -133,6 +145,7 @@ const std::unordered_map<std::string, uint8_t> wordDefault =
 //PGM module specifiers
 const std::unordered_map<std::string, uint8_t> pgmDefaultItems =
 {
+    //PID
     {"PID.LSP", 26},
     {"PID.KP", 27},
     {"PID.TI", 28},
@@ -140,6 +153,17 @@ const std::unordered_map<std::string, uint8_t> pgmDefaultItems =
     {"PID.WSP", 61},
     {"PID.PV", 63},
     {"PID.RSP", 66},
+
+
+    //Four channel segment function
+    {"CMP1.X1", 26},
+    {"CMP1.Y1", 27},
+    {"CMP1.X2", 28},
+    {"CMP1.Y2", 29},
+    {"CMP1.X3", 30},
+    {"CMP1.Y3", 31},
+    {"CMP1.X4", 32},
+    {"CMP1.Y4", 33}
 };
 
 
@@ -171,9 +195,25 @@ const std::unordered_map<std::string, uint8_t> extDefaultItems =
 
     //DO
     {"DO", 70},
+    {"DO1", 70},
+    {"DO2", 70},
+    {"DO3", 70},
+    {"DO4", 70},
+    {"DO5", 70},
+    {"DO6", 70},
+    {"DO7", 70},
+    {"DO8", 70},
 
     //DI
-    {"DI", 71}
+    {"DI", 71},
+    {"DI1", 71},
+    {"DI2", 71},
+    {"DI3", 71},
+    {"DI4", 71},
+    {"DI5", 71},
+    {"DI6", 71},
+    {"DI7", 71},
+    {"DI8", 71},
 };
 
 
@@ -187,30 +227,24 @@ const std::unordered_map<std::string, uint8_t> extDefaultItems =
 //Lookup table for N2 modules
 inline std::unordered_map<std::string, n2ModuleInfo> n2Modules =
 {
-    //Name      Address     Size        Count       Items:       Name        Offset        
-    {"DO"      ,{0x005     ,0x00       ,8           ,{          byteDefault             }}},
+    //Name      Address     Size        Count       Items:       Name        Offset       
+    {"DO"      ,{0x005     ,0x01       ,1           ,{          byteDefault             }}},
 
-    {"DI"      ,{0x006     ,0x00       ,8           ,{          byteDefault             }}},
+    {"DI"      ,{0x006     ,0x01       ,1           ,{          byteDefault             }}},
 
-    {"DCO"     ,{0x00a     ,0x00       ,16          ,{          byteDefault             }}},
+    {"LRS"     ,{0x008     ,0x01       ,2          ,{          wordDefault             }}},
+    {"LRS2"    ,{0x02c     ,0x01       ,2          ,{          wordDefault             }}},
 
-    {"LRS"     ,{0x00b     ,0x00       ,16          ,{          byteDefault             }}},
+    {"DCO"     ,{0x00a     ,0x01       ,2          ,{          wordDefault             }}},
 
-    {"ACO"     ,{0x022     ,0x01       ,8           ,{          wordDefault             }}},
+    {"ACO"     ,{0x022     ,0x01       ,8           ,{{          "CV"   ,0             }}}},
 
     {"PGM"     ,{0x040     ,0x60       ,12          ,{          pgmDefaultItems         }}},
 
-    {"PMnI"    ,{0x04a     ,0x01       ,16          ,{          wordDefault             }}},
+    {"AI"      ,{0x4c0     ,0x10       ,8           ,{{         "CV"     ,7          }}}},
 
-    {"PMnK"    ,{0x05a     ,0x01       ,34          ,{          wordDefault             }}},
-
-    {"PMnO"    ,{0x07c     ,0x01       ,8           ,{          wordDefault             }}},
-
-    {"AI"      ,{0x4c0     ,0x10       ,8           ,{{         "CV"        ,7          },
-                                                    {           "WORD"      ,7          }}}},
-
-    {"AO"      ,{0x540     ,0x10       ,8           ,{{         "CV"        ,6          },
-                                                    {           "WORD"      ,6          }}}},
+    {"AO"      ,{0x540     ,0x10       ,2           ,{{         "CV"     ,6          }}}},
+    {"AO2"     ,{0x900     ,0x10       ,6           ,{{         "CV"     ,6          }}}},
     
     {"EXT"     ,{0x5c0     ,0x50       ,8           ,{      extDefaultItems             }}},
 

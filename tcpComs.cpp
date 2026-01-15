@@ -106,10 +106,6 @@ int tcpToN2(n2RequestData *req, std::string msg)
     //Get module parameters
     //n2ModuleInfo modInfo = n2Modules.at(req->module);
 
-    
-    //
-    req->binary = ((!(n2Modules.at(req->module).size) || req->module == "MAN.B"));
-
 
     //Extract fourth entry as item
     if(extractString(&msg, &(req->item), seperator))
@@ -129,7 +125,7 @@ int tcpToN2(n2RequestData *req, std::string msg)
     //If string is empty, no data was sent, otherwise assume remaining string is data
     if (msg.length() > 0)
     {
-        if (req->binary)
+        if (req->item == "BOOL")
             req->data = uint8_t(msg == "true" || msg == "1");
         else
             req->data = std::stof(msg);
@@ -138,7 +134,7 @@ int tcpToN2(n2RequestData *req, std::string msg)
         req->data = std::monostate{};
 
     //Verify that the index is valid 
-    if (req->index <= n2Modules.at(req->module).count)
+    if (req->index <= n2Modules.at(req->module).count || req->item == "BOOL")
         return 0;
 	else
         return 0x10;
@@ -159,9 +155,9 @@ std::string n2ToNodeRed(const n2RequestData req)
 	if (std::holds_alternative<float>(req.data))
 		(msg)+= std::to_string(std::get<float>(req.data));
 	else if (std::holds_alternative<uint8_t>(req.data))
-		(msg)+= std::to_string((std::get<uint8_t>(req.data)) & ((0x1 << (req.index - 1)) == 1));
+        (msg)+= std::to_string(std::get<uint8_t>(req.data));
 	else if (std::holds_alternative<uint16_t>(req.data))
-		(msg)+= std::to_string((std::get<uint16_t>(req.data)) & ((0x1 << (req.index - 1 )) == 1));
+        (msg)+= std::to_string(std::get<uint16_t>(req.data));
 	else
 		(msg)+= std::get<std::string>(req.data);
 

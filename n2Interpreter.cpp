@@ -112,23 +112,43 @@ uint32_t n2ChkCalc(__uint128_t msg, uint8_t len)                            //Ca
 
 
 
-int n2AdrCalc(uint32_t *adr, const n2RequestData req)
+int n2AdrCalc(uint32_t *adr, n2RequestData *req)
 {
-	n2ModuleInfo modInfo = n2Modules.at(req.module);
+	n2ModuleInfo modInfo = n2Modules.at(req->module);
+	*adr = ((req->deviceId)<<0x10) | (modInfo.address + modInfo.items.at(req->item));
 
-	
-	*adr = ((req.deviceId)<<0x10) | (modInfo.address + modInfo.items.at(req.item) + modInfo.size * (req.index -1));
+	if (req->item == "BOOL")
+	{
+		int size;
+		if (req->item == "WORD")
+			size = 16;
+		else if (req->item == "DWORD")
+			size = 32;
+		else
+			size = 8;
+		if (req->index / (size+1))
+		{
+			(req->index)-= size;
+			(*adr)++;
+		}
+		
+	}
+	else
+		(*adr)+= modInfo.size * (req->index -1);
 
+	//Exception for extension modules, to be able to read single boolean
+	if (req->module == "EXT" && req->item.substr(0,1) == "D" && req->item.length() > 2)
+		req->index = std::stoi(req->item.substr(2,1));
 	
-	if (!std::holds_alternative<std::monostate>(req.data))
+	if (!std::holds_alternative<std::monostate>(req->data))
 		(*adr) |= n2WriteCmd;
 	else
 	{
 		//Exception for AI and AO
-		if (req.module == "AI")
-			*adr = ((req.deviceId)<<24) | 0x840000 | (((*adr) & 0xff) << 0x8) | (*adr)>>0x8;
-		else if (req.module == "AO")
-			*adr = ((req.deviceId)<<24) | 0x840000 | (((*adr) & 0xff) << 0x8) | (*adr)>>0x8;
+		if (req->module == "AI")
+			*adr = ((req->deviceId)<<24) | 0x840000 | (((*adr) & 0xff) << 0x8) | (*adr)>>0x8;
+		else if (req->module == "AO")
+			*adr = ((req->deviceId)<<24) | 0x840000 | (((*adr) & 0xff) << 0x8) | (*adr)>>0x8;
 		else
 			(*adr) |= n2ReadCmd;
 	}
@@ -152,7 +172,7 @@ int n2AdrCalc(uint32_t *adr, const n2RequestData req)
 
 
 
-int n2BuildMsg(std::string *msg, const n2RequestData req)
+int n2BuildMsg(std::string *msg, n2RequestData *req)
 {
 	int err = 0;
 	uint64_t imsg = 0;
@@ -171,20 +191,20 @@ int n2BuildMsg(std::string *msg, const n2RequestData req)
 	
 
 	//Calculate/convert the value, if its a write request, otherwise skipped.
-	if (!std::holds_alternative<std::monostate>(req.data))
+	if (!std::holds_alternative<std::monostate>(req->data))
 	{
-		if (std::holds_alternative<uint8_t>(req.data))
-			imsg = (imsg<<8) | std::get<uint8_t>(req.data);
-		else if (std::holds_alternative<uint16_t>(req.data))
-			imsg = (imsg<<16) | std::get<uint16_t>(req.data);
-		else if (std::holds_alternative<float>(req.data))
-			imsg = (imsg<<16) | floatToN2number(std::get<float>(req.data));
+		if (std::holds_alternative<uint8_t>(req->data))
+			imsg = (imsg<<8) | std::get<uint8_t>(req->data);
+		else if (std::holds_alternative<uint16_t>(req->data))
+			imsg = (imsg<<16) | std::get<uint16_t>(req->data);
+		else if (std::holds_alternative<float>(req->data))
+			imsg = (imsg<<16) | floatToN2number(std::get<float>(req->data));
 		else
 			return 0x1;
 	}
 
 	std::stringstream msgSs;
-	if (req.deviceId < 0x10)
+	if (req->deviceId < 0x10)
 		msgSs << "0";
 	msgSs << std::uppercase << std::hex << imsg;
 
@@ -245,7 +265,7 @@ int n2DecodeMsg(n2RequestData *req, std::string msg) //val must be float = index
 
 
 	//Return raw byte
-	if (req->item != "BYTE")
+	if (req->item == "BYTE")
 		req->data = uint8_t(imsg);
 
 	//Return raw WORD
@@ -253,14 +273,8 @@ int n2DecodeMsg(n2RequestData *req, std::string msg) //val must be float = index
 		req->data = uint16_t(imsg);
 
 	//Return bool
-	else if (req->binary)
-	{
-		if (len > 2)
-			req->data = uint16_t(imsg);
-		else
-			req->data = uint8_t(imsg);
-		return 0;
-	}
+	else if (req->item == "BOOL")
+		req->data = uint8_t((imsg & (0x1 << (req->index - 1))) && 1);
 
 	//Return float
 	else
@@ -406,7 +420,7 @@ int n2Request(n2RequestData *req, int serialPort, int serialTxBuffSz, int serial
 	int err = 0;
 
 	//If binary data is to be written, read current binary states, before overwriting binary data.
-	if (req->binary && !std::holds_alternative<std::monostate>(req->data))
+	if ((req->item == "BOOL") && !std::holds_alternative<std::monostate>(req->data))
 	{
 		//Store write data in a temporary variable, remove it from struct
 		uint16_t dwTemp = std::get<uint8_t>(req->data);
@@ -434,7 +448,7 @@ int n2Request(n2RequestData *req, int serialPort, int serialTxBuffSz, int serial
 
 
 	//Build message and send to serial N2 bus
-	err = n2BuildMsg(&msg, *req);
+	err = n2BuildMsg(&msg, req);
 	if (err)
 		return err;
 
