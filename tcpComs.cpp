@@ -1,15 +1,4 @@
 #include "tcpComs.hpp"
-#include "n2Interpreter.hpp"
-
-//TCP socket
-#include <sys/socket.h>
-#include <arpa/inet.h>
-#include <unistd.h>
-#include <netinet/in.h>
-
-#include <poll.h>
-#include <chrono>
-#include <atomic>
 
 
 
@@ -92,74 +81,63 @@ int tcpGetClient(int serverSocket, int timeout_ms, std::atomic<bool> *interrupt)
 
 
 
-int nodeRedToN2(n2RequestData *req, std::string msg)
+int tcpToN2(n2RequestData *req, std::string msg)
 {
-    //Remove \n if it was not removed from the message
-    /*int end = msg.find("\n");
-    if (end >= 0)
-        msg.erase(end, 1);*/
-
+    const char seperator = ',';
     //Extract first entry as Request ID
-	int end = msg.find(",");
-    if (end < 0)
+    if (extractString(&msg, &(req->requestId), seperator))
         return 0x10;
-    req->requestId = msg.substr(0, end);
-	msg.erase(0, end+1);
 
+    std::string temp;
     //Extract second entry as PLC ID
-    end = msg.find(",");
-    if (end < 0)
+    if (extractString(&msg, &temp, seperator))
         return 0x10;
-    req->deviceId = std::stoi(msg.substr(0, end));
-    msg.erase(0, end+1);
-
+    req->deviceId = std::stoi(temp);
     
     //Extract third entry as module
-    end = msg.find(",");
-    if (end < 0)
+    if (extractString(&msg, &(req->module), seperator))
         return 0x10;
-    req->module = (msg.substr(0, end));
-    msg.erase(0, end+1);
-    
-    if (moduleSize.find(req->module) == moduleSize.end())
-        return 0x10;
-    
-    req->binary = ((!(moduleSize.at(req->module)) || req->module == "MAN.B"));
 
-    //Extract PGM submodule + item as fourth entry if module = PGM
-    if (req->module.find("PGM") != std::string::npos)
+
+    //Verify that module exists, return error code if not
+    if (n2Modules.find(req->module) == n2Modules.end())
+        return 0x10;
+
+    //Get module parameters
+    //n2ModuleInfo modInfo = n2Modules.at(req->module);
+
+
+    //Extract fourth entry as item
+    if(extractString(&msg, &(req->item), seperator))
+        return 0x10;
+
+    //Verify that item exists, return error code if not
+    if (n2Modules.at(req->module).items.find(req->item) == n2Modules.at(req->module).items.end())
+        return 0x10;
+    
+    
+
+    //Extract fifth as index and return if there is no data
+    if(extractString(&msg, &temp, seperator))
+        return 0x10;
+    req->index = std::stoi(temp);
+    
+    //If string is empty, no data was sent, otherwise assume remaining string is data
+    if (msg.length() > 0)
     {
-        end = msg.find(",");
-        if (end < 0)
-            return 0x10;
-    	req->pgm = (msg.substr(0, end));
-    	msg.erase(0, end+1);
+        if (req->item == "BOOL")
+            req->data = uint8_t(msg == "true" || msg == "1");
+        else
+            req->data = std::stof(msg);
     }
-	else
-		req->pgm = std::monostate{};
-
-
-    //Extract index and return if there is no data
-    end = msg.find(",");
-	if ((size_t)end == std::string::npos)
-	{
-		req->data = std::monostate{};
-    	req->index = std::stoi(msg);
-		return 0;
-	}
-
-    //Extract index
-	req->index = stoi(msg.substr(0, end));
-    msg.erase(0, end+1);
-	end = msg.length();
-
-    //Extract data
-    if (req->binary)
-        req->data = uint8_t(msg == "true" || msg == "1");
     else
-		req->data = std::stof(msg.substr(0, end));
+        req->data = std::monostate{};
 
-	return 0;
+    //Verify that the index is valid 
+    if (req->index <= n2Modules.at(req->module).count || req->item == "BOOL")
+        return 0;
+	else
+        return 0x10;
 }
 
 
@@ -177,9 +155,9 @@ std::string n2ToNodeRed(const n2RequestData req)
 	if (std::holds_alternative<float>(req.data))
 		(msg)+= std::to_string(std::get<float>(req.data));
 	else if (std::holds_alternative<uint8_t>(req.data))
-		(msg)+= std::to_string((std::get<uint8_t>(req.data)) & ((0x1 << (req.index - 1)) == 1));
+        (msg)+= std::to_string(std::get<uint8_t>(req.data));
 	else if (std::holds_alternative<uint16_t>(req.data))
-		(msg)+= std::to_string((std::get<uint16_t>(req.data)) & ((0x1 << (req.index - 1 )) == 1));
+        (msg)+= std::to_string(std::get<uint16_t>(req.data));
 	else
 		(msg)+= std::get<std::string>(req.data);
 

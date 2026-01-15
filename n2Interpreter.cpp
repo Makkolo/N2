@@ -1,16 +1,5 @@
 #include "n2Interpreter.hpp"
 
-#include <iostream>
-#include <cmath>
-#include <string.h>
-#include <sstream>
-
-//Serial coms
-#include <fcntl.h> // Contains file controls like O_RDWR
-#include <errno.h> // Error integer and strerror() function
-#include <termios.h> // Contains POSIX terminal control definitions
-#include <unistd.h> // write(), read(), close()
-
 
 
 float n2numberToFloat(const uint16_t msg)        //Convert N2 number to float.
@@ -123,38 +112,43 @@ uint32_t n2ChkCalc(__uint128_t msg, uint8_t len)                            //Ca
 
 
 
-int n2AdrCalc(uint32_t *adr, const n2RequestData req)
+int n2AdrCalc(uint32_t *adr, n2RequestData *req)
 {
+	n2ModuleInfo modInfo = n2Modules.at(req->module);
+	*adr = ((req->deviceId)<<0x10) | (modInfo.address + modInfo.items.at(req->item));
 
-	if (moduleAdr.find(req.module) == moduleAdr.end())
+	if (req->item == "BOOL")
 	{
-		std::cout << "Error: Module \"" << req.module << "\" is not defined.\n" << std::flush;
-		return 0x10;
-	}
-	
-	*adr = ((req.deviceId)<<0x10) | (moduleAdr.at(req.module) + moduleSize.at(req.module) * (req.index -1));
-
-	if (!std::holds_alternative<std::monostate>(req.pgm))
-	{
-		std::string pgm = std::get<std::string>(req.pgm);
-		if (pgmAdr.find(pgm) == pgmAdr.end())
+		int size;
+		if (req->item == "WORD")
+			size = 16;
+		else if (req->item == "DWORD")
+			size = 32;
+		else
+			size = 8;
+		if (req->index / (size+1))
 		{
-			std::cout << "Error: PGM item \"" << pgm << "\" does not exist\n" << std::flush;
-			return 0x20;
+			(req->index)-= size;
+			(*adr)++;
 		}
 		
-		(*adr)+= pgmAdr.at(pgm);
 	}
+	else
+		(*adr)+= modInfo.size * (req->index -1);
 
-	if (!std::holds_alternative<std::monostate>(req.data))
+	//Exception for extension modules, to be able to read single boolean
+	if (req->module == "EXT" && req->item.substr(0,1) == "D" && req->item.length() > 2)
+		req->index = std::stoi(req->item.substr(2,1));
+	
+	if (!std::holds_alternative<std::monostate>(req->data))
 		(*adr) |= n2WriteCmd;
 	else
 	{
 		//Exception for AI and AO
-		if (req.module == "AI")
-			*adr = ((req.deviceId)<<24) | 0x840000 | (((*adr) & 0xff) << 0x8) | (*adr)>>0x8;
-		else if (req.module == "AO")
-			*adr = ((req.deviceId)<<24) | 0x840000 | (((*adr) & 0xff) << 0x8) | (*adr)>>0x8;
+		if (req->module == "AI")
+			*adr = ((req->deviceId)<<24) | 0x840000 | (((*adr) & 0xff) << 0x8) | (*adr)>>0x8;
+		else if (req->module == "AO")
+			*adr = ((req->deviceId)<<24) | 0x840000 | (((*adr) & 0xff) << 0x8) | (*adr)>>0x8;
 		else
 			(*adr) |= n2ReadCmd;
 	}
@@ -178,7 +172,7 @@ int n2AdrCalc(uint32_t *adr, const n2RequestData req)
 
 
 
-int n2BuildMsg(std::string *msg, const n2RequestData req)
+int n2BuildMsg(std::string *msg, n2RequestData *req)
 {
 	int err = 0;
 	uint64_t imsg = 0;
@@ -197,20 +191,20 @@ int n2BuildMsg(std::string *msg, const n2RequestData req)
 	
 
 	//Calculate/convert the value, if its a write request, otherwise skipped.
-	if (!std::holds_alternative<std::monostate>(req.data))
+	if (!std::holds_alternative<std::monostate>(req->data))
 	{
-		if (std::holds_alternative<uint8_t>(req.data))
-			imsg = (imsg<<8) | std::get<uint8_t>(req.data);
-		else if (std::holds_alternative<uint16_t>(req.data))
-			imsg = (imsg<<16) | std::get<uint16_t>(req.data);
-		else if (std::holds_alternative<float>(req.data))
-			imsg = (imsg<<16) | floatToN2number(std::get<float>(req.data));
+		if (std::holds_alternative<uint8_t>(req->data))
+			imsg = (imsg<<8) | std::get<uint8_t>(req->data);
+		else if (std::holds_alternative<uint16_t>(req->data))
+			imsg = (imsg<<16) | std::get<uint16_t>(req->data);
+		else if (std::holds_alternative<float>(req->data))
+			imsg = (imsg<<16) | floatToN2number(std::get<float>(req->data));
 		else
 			return 0x1;
 	}
 
 	std::stringstream msgSs;
-	if (req.deviceId < 0x10)
+	if (req->deviceId < 0x10)
 		msgSs << "0";
 	msgSs << std::uppercase << std::hex << imsg;
 
@@ -269,17 +263,23 @@ int n2DecodeMsg(n2RequestData *req, std::string msg) //val must be float = index
 	//Remove checksum
 	imsg = (imsg>>24);
 
-	//Check if data is boolean and return boolean value 
-	if (req->binary)
-	{
-		if (len > 2)
-			req->data = uint16_t(imsg);
-		else
-			req->data = uint8_t(imsg);
-		return 0;
-	}
 
-	req->data = n2numberToFloat(imsg);
+	//Return raw byte
+	if (req->item == "BYTE")
+		req->data = uint8_t(imsg);
+
+	//Return raw WORD
+	else if (req->item == "WORD")
+		req->data = uint16_t(imsg);
+
+	//Return bool
+	else if (req->item == "BOOL")
+		req->data = uint8_t((imsg & (0x1 << (req->index - 1))) && 1);
+
+	//Return float
+	else
+		req->data = n2numberToFloat(imsg);
+	
 	return 0;
 }
 
@@ -420,7 +420,7 @@ int n2Request(n2RequestData *req, int serialPort, int serialTxBuffSz, int serial
 	int err = 0;
 
 	//If binary data is to be written, read current binary states, before overwriting binary data.
-	if (req->binary && !std::holds_alternative<std::monostate>(req->data))
+	if ((req->item == "BOOL") && !std::holds_alternative<std::monostate>(req->data))
 	{
 		//Store write data in a temporary variable, remove it from struct
 		uint16_t dwTemp = std::get<uint8_t>(req->data);
@@ -448,7 +448,7 @@ int n2Request(n2RequestData *req, int serialPort, int serialTxBuffSz, int serial
 
 
 	//Build message and send to serial N2 bus
-	err = n2BuildMsg(&msg, *req);
+	err = n2BuildMsg(&msg, req);
 	if (err)
 		return err;
 
@@ -467,4 +467,96 @@ int n2Request(n2RequestData *req, int serialPort, int serialTxBuffSz, int serial
 	err = n2DecodeMsg(req, msg);
 
 	return err;
+}
+
+
+
+
+
+
+
+
+
+
+//Simple file reading function to expand lookup table.
+int expandTables(std::string filePath)
+{
+    std::string line;
+    std::ifstream file(filePath);
+	const char space[2] = {' ', '\t'};
+	std::string module, item, temp;
+	uint16_t address;
+	uint8_t size, count, offset;
+
+	//Iterate through file, line by line.
+    while(std::getline(file, line))
+    {
+		//Remove spaces
+		cleanString(&line, space, 2);
+
+		while(line.length() > 0)
+		{
+			//Get module name
+			if (extractString(&line, &module, ','))
+				return 0x10;
+			
+
+			//Check if module allready exists, add item if it does.
+			if(n2Modules.find(module) == n2Modules.end())
+			{
+
+				//Get address
+				if (extractString(&line, &temp, ','))
+					return 0x10;
+				address = std::stoi(temp);
+
+
+				//Get size
+				if (extractString(&line, &temp, ','))
+					return 0x10;
+				size = std::stoi(temp);
+
+
+				//Get count
+				if (extractString(&line, &temp, ','))
+					return 0x10;
+				count = std::stoi(temp);
+
+
+				//Get item
+				if (extractString(&line, &item, ','))
+					return 0x10;
+
+
+				//Get offset
+				if (extractString(&line, &temp, ','))
+					return 0x10;
+				offset = std::stoi(temp);
+
+				//Append the new module to the lookup table
+				n2Modules.insert({ module, { address, size, count, {{ item, offset }} } });			
+			}
+			else
+			{
+				//Get item
+				if (extractString(&line, &item, ','))
+					return 0x10;
+
+
+				if (n2Modules.at(module).items.find(item) == n2Modules.at(module).items.end())
+				{
+					//Get offset
+					if (extractString(&line, &temp, ','))
+						return 0x10;
+					offset = std::stoi(temp);
+					
+					//Append item to the lookup table of the corresponding module
+					n2Modules.at(module).items.insert({item, std::stoi(temp)});
+				}
+				else
+					std::cout << "WARNING: expandTables: Skipping this entry as item \"" << item << "\" is allready defined for module \"" << module << "\". Verify that the format is correct" << std::flush;
+			}
+		}
+    }
+	return 0;
 }
