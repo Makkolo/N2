@@ -103,9 +103,9 @@ int tcpRx(std::queue<std::string> *queue, std::mutex *lockQ, int *socket, std::a
             }
             else
             {
-            std::cout << "ERROR: TCP Read error:" << errno << " \"" << strerror(errno) << "\" during tcp recv\n" << std::flush;
-            (*threadError) += 0x101;
-            return -1;
+                std::cout << "ERROR: TCP Read error:" << errno << " \"" << strerror(errno) << "\" during tcp recv\n" << std::flush;
+                (*threadError) += 0x101;
+                return -1;
             }
         }
         else if (err < 0 || (pfd.revents & (POLLERR | POLLHUP | POLLNVAL)))
@@ -369,6 +369,8 @@ int main(int argc, char* argv[])        //Input arguments from terminal, first a
 
         //Run worker threads until error
         std::cout << "Starting nested main loop.\n" << std::flush;
+
+        //Loop until error in threads or termination
         while (! ((threadError - prevError) & 0xFF00))
         {
             //Terminate program if terminateProgram signal received
