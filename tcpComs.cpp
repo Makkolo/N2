@@ -12,12 +12,16 @@
 int tcpInitHost()
 {
     int serverSocket = socket(AF_INET, SOCK_STREAM, 0);
+
+    if (serverSocket < 0)
+        return -1;
     sockaddr_in adr;//{ 0 };
     adr.sin_family = AF_INET;
     adr.sin_port = htons(8888);
     adr.sin_addr.s_addr = INADDR_ANY;
-    
-    bind(serverSocket, (struct sockaddr*)&adr, sizeof(adr));
+
+    if (bind(serverSocket, (struct sockaddr*)&adr, sizeof(adr)))
+        return -1;
 
     return serverSocket;
 }
@@ -33,6 +37,10 @@ int tcpInitHost()
 
 int tcpGetClient(int serverSocket, int timeout_ms, std::atomic<bool> *interrupt)
 {
+    //Return error if invalid server socket
+    if (serverSocket < 0)
+        return serverSocket;
+
     //Loop variables
     int clientSocket = -1, err;
     

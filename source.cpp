@@ -352,11 +352,16 @@ int main(int argc, char* argv[])        //Input arguments from terminal, first a
         if (terminateProgram)
         {
             std::cout << "Program termination requested, aborting init\n" << std::flush;
+            threadError = 0xA000;
             break;
         }
         if (clientSocket < 0)
         {
-            std::cout << "ERROR: Failed to establish tcp connection\n" << std::flush;
+            std::cout << "ERROR: Failed to establish tcp connection. Is the port (8888) allready in use?\n" 
+            << "\t- If the program was restarted, wait for 1 minute for the port to be available again then rerun the program\n"
+            << "\t - If nodered was restartet or deployed, another instance of the program is probably running in the background\n" 
+            << std::flush;
+            threadError = 0xB000;
             break;
         }
         
@@ -404,7 +409,7 @@ int main(int argc, char* argv[])        //Input arguments from terminal, first a
         }
 
         //Abort and join all threads
-        std::cout << "Terminating all worker threads\n" << std::flush;
+        std::cout << "Break in working loop, terminating all worker threads\n" << std::flush;
         stopThreads = true;
         rx.join();
         n2.join();
