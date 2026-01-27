@@ -144,10 +144,8 @@ int n2AdrCalc(uint32_t *adr, n2RequestData *req)
 		(*adr) |= n2WriteCmd;
 	else
 	{
-		//Exception for AI and AO
-		if (req->module == "AI")
-			*adr = ((req->deviceId)<<24) | 0x840000 | (((*adr) & 0xff) << 0x8) | (*adr)>>0x8;
-		else if (req->module == "AO")
+		//Exception for devices with byteswap, like AI, AO and AO2
+		if (n2Modules.at(req->module).byteSwap)
 			*adr = ((req->deviceId)<<24) | 0x840000 | (((*adr) & 0xff) << 0x8) | (*adr)>>0x8;
 		else
 			(*adr) |= n2ReadCmd;
@@ -486,7 +484,7 @@ int expandTables(std::string filePath)
 	const char space[2] = {' ', '\t'};
 	std::string module, item, temp;
 	uint16_t address;
-	uint8_t size, count, offset;
+	uint8_t size, count, byteswap, offset;
 
 	//Iterate through file, line by line.
     while(std::getline(file, line))
@@ -501,7 +499,7 @@ int expandTables(std::string filePath)
 				return 0x10;
 			
 
-			//Check if module allready exists, add item if it does.
+			//Check if module allready exists, add item if it does not.
 			if(n2Modules.find(module) == n2Modules.end())
 			{
 
@@ -523,6 +521,12 @@ int expandTables(std::string filePath)
 				count = std::stoi(temp);
 
 
+				//Get byte swap
+				if (extractString(&line, &temp, ','))
+					return 0x10;
+				byteswap = std::stoi(temp);
+
+
 				//Get item
 				if (extractString(&line, &item, ','))
 					return 0x10;
@@ -534,8 +538,10 @@ int expandTables(std::string filePath)
 				offset = std::stoi(temp);
 
 				//Append the new module to the lookup table
-				n2Modules.insert({ module, { address, size, count, {{ item, offset }} } });			
+				n2Modules.insert({ module, { address, size, count, byteswap, {{ item, offset }} } });			
 			}
+
+			//For modules that allready exists, add item unless it already exists, update offset if its changed
 			else
 			{
 				//Get item
@@ -543,18 +549,22 @@ int expandTables(std::string filePath)
 					return 0x10;
 
 
-				if (n2Modules.at(module).items.find(item) == n2Modules.at(module).items.end())
+				else
 				{
 					//Get offset
 					if (extractString(&line, &temp, ','))
 						return 0x10;
 					offset = std::stoi(temp);
 					
-					//Append item to the lookup table of the corresponding module
-					n2Modules.at(module).items.insert({item, std::stoi(temp)});
-				}
-				else
-					std::cout << "WARNING: expandTables: Skipping this entry as item \"" << item << "\" is allready defined for module \"" << module << "\". Verify that the format is correct" << std::flush;
+					if (n2Modules.at(module).items.find(item) == n2Modules.at(module).items.end())
+						n2Modules.at(module).items.insert({item, std::stoi(temp)});
+					else if (n2Modules.at(module).items.at(item) != offset)
+						n2Modules.at(module).items.at(item) = offset;
+					else
+						std::cout << "WARNING: expandTables: Skipping this entry as item \"" 
+						<< item << "\" is allready defined for module \"" << module 
+						<< "\". Verify that the format is correct" << std::flush;
+				}					
 			}
 		}
     }

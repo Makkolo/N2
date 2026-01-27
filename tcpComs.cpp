@@ -129,6 +129,7 @@ int tcpToN2(n2RequestData *req, std::string msg)
     if(extractString(&msg, &temp, seperator))
         return 0x10;
     req->index = std::stoi(temp);
+
     
     //If string is empty, no data was sent, otherwise assume remaining string is data
     if (msg.length() > 0)
@@ -144,8 +145,21 @@ int tcpToN2(n2RequestData *req, std::string msg)
     //Verify that the index is valid 
     if (req->index <= n2Modules.at(req->module).count || req->item == "BOOL")
         return 0;
-	else
-        return 0x10;
+    //Foolproofing for LRS and AO split addresses
+	else if (req->module == "AO" or req->module == "LRS")
+    {
+        (req->index)-= n2Modules.at(req->module).count;
+        if (req->module == "AO")
+            req->module = "AO2";
+        else
+            req->module = "LRS2";
+
+        if (req->index <= n2Modules.at(req->module).count)
+            return 0;    
+    }
+
+
+    return 0x10;
 }
 
 

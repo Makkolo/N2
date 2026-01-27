@@ -90,6 +90,7 @@ struct n2ModuleInfo{
     uint16_t address;
     uint8_t size;
     uint8_t count;
+    uint8_t byteSwap;//Adds a shift in address calculation such that ABCD -> CDAB. Er kjent for AI, AO og AO2
     //                  Name        offset
     std::unordered_map<std::string, uint8_t> items;
 };
@@ -227,26 +228,26 @@ const std::unordered_map<std::string, uint8_t> extDefaultItems =
 //Lookup table for N2 modules
 inline std::unordered_map<std::string, n2ModuleInfo> n2Modules =
 {
-    //Name      Address     Size        Count       Items:       Name        Offset       
-    {"DO"      ,{0x005     ,0x01       ,1           ,{          byteDefault             }}},
+    //Name      Address     Size        Count       byteSwap       Items:       Name        Offset       
+    {"DO"      ,{0x005     ,0x01       ,1           ,0              ,{          byteDefault             }}},
 
-    {"DI"      ,{0x006     ,0x01       ,1           ,{          byteDefault             }}},
+    {"DI"      ,{0x006     ,0x01       ,1           ,0              ,{          byteDefault             }}},
 
-    {"LRS"     ,{0x008     ,0x01       ,2          ,{          wordDefault             }}},
-    {"LRS2"    ,{0x02c     ,0x01       ,2          ,{          wordDefault             }}},
+    {"LRS"     ,{0x008     ,0x01       ,2           ,0              ,{          wordDefault             }}},
+    {"LRS2"    ,{0x02c     ,0x01       ,2           ,0              ,{          wordDefault             }}},
 
-    {"DCO"     ,{0x00a     ,0x01       ,2          ,{          wordDefault             }}},
+    {"DCO"     ,{0x00a     ,0x01       ,2           ,0              ,{          wordDefault             }}},
 
-    {"ACO"     ,{0x022     ,0x01       ,8           ,{{          "CV"   ,0             }}}},
+    {"ACO"     ,{0x022     ,0x01       ,8           ,0              ,{{          "CV"   ,0             }}}},
 
-    {"PGM"     ,{0x040     ,0x60       ,12          ,{          pgmDefaultItems         }}},
+    {"PGM"     ,{0x040     ,0x60       ,12          ,0              ,{          pgmDefaultItems         }}},
 
-    {"AI"      ,{0x4c0     ,0x10       ,8           ,{{         "CV"     ,7          }}}},
+    {"AI"      ,{0x4c0     ,0x10       ,8           ,1              ,{{         "CV"     ,7          }}}},
 
-    {"AO"      ,{0x540     ,0x10       ,2           ,{{         "CV"     ,6          }}}},
-    {"AO2"     ,{0x900     ,0x10       ,6           ,{{         "CV"     ,6          }}}},
+    {"AO"      ,{0x540     ,0x10       ,2           ,1              ,{{         "CV"     ,6          }}}},
+    {"AO2"     ,{0x900     ,0x10       ,6           ,1              ,{{         "CV"     ,6          }}}},
     
-    {"EXT"     ,{0x5c0     ,0x50       ,8           ,{      extDefaultItems             }}},
+    {"EXT"     ,{0x5c0     ,0x50       ,8           ,0              ,{      extDefaultItems             }}},
 
-    {"TS"      ,{0x840     ,0x10       ,8           ,{{         "TIME"      ,4          }}}}
+    {"TS"      ,{0x840     ,0x10       ,8           ,0              ,{{         "TIME"      ,4          }}}}
 };
